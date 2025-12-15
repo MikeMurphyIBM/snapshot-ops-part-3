@@ -191,45 +191,42 @@ if [[ -z "$BOOT_VOLUME_ID" ]]; then
     echo "→ Skipping shutdown - LPAR has no volumes (cannot be active)"
 else
     echo "→ Checking LPAR status..."
-    
+
     CURRENT_STATUS=$(ibmcloud pi ins get "$SECONDARY_INSTANCE_ID" --json \
         | jq -r '.status')
-    
+
     echo "  Current status: ${CURRENT_STATUS}"
-    
+
     if [[ "$CURRENT_STATUS" == "ACTIVE" ]]; then
         echo ""
-        echo "→ Initiating graceful shutdown..."
-        
-        ibmcloud pi ins action "$SECONDARY_INSTANCE_ID" --operation soft-reboot > /dev/null 2>&1 || {
-            echo "⚠ WARNING: Graceful shutdown failed - attempting immediate shutdown"
-            ibmcloud pi ins action "$SECONDARY_INSTANCE_ID" --operation immediate-shutdown > /dev/null 2>&1 || {
-                echo "✗ ERROR: Immediate shutdown also failed"
-                exit 1
-            }
+        echo "→ Initiating immediate shutdown..."
+
+        ibmcloud pi ins action "$SECONDARY_INSTANCE_ID" --operation immediate-shutdown > /dev/null 2>&1 || {
+            echo "✗ ERROR: Immediate shutdown failed"
+            exit 1
         }
-        
+
         echo "✓ Shutdown command accepted"
         echo ""
-        
+
         echo "→ Waiting for LPAR to reach SHUTOFF state (max: $(($MAX_SHUTDOWN_WAIT/60)) minutes)..."
-        
+
         SHUTDOWN_ELAPSED=0
-        
+
         while true; do
             STATUS=$(ibmcloud pi ins get "$SECONDARY_INSTANCE_ID" --json \
                 | jq -r '.status')
-            
+
             if [[ "$STATUS" == "SHUTOFF" ]]; then
                 echo "✓ LPAR is SHUTOFF"
                 break
             fi
-            
+
             if [[ $SHUTDOWN_ELAPSED -ge $MAX_SHUTDOWN_WAIT ]]; then
                 echo "✗ ERROR: LPAR failed to shutdown within $(($MAX_SHUTDOWN_WAIT/60)) minutes"
                 exit 1
             fi
-            
+
             echo "  Status: ${STATUS} - waiting ${POLL_INTERVAL}s..."
             sleep "$POLL_INTERVAL"
             SHUTDOWN_ELAPSED=$((SHUTDOWN_ELAPSED + POLL_INTERVAL))
