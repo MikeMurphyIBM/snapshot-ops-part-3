@@ -45,11 +45,11 @@ readonly REGION="us-south"
 readonly RESOURCE_GROUP="Default"
 
 # PowerVS Workspace Configuration
-readonly PVS_CRN="crn:v1:bluemix:public:power-iaas:dal10:a/21d74dd4fe814dfca20570bbb93cdbff:cc84ef2f-babc-439f-8594-571ecfcbe57a::"
-readonly CLOUD_INSTANCE_ID="cc84ef2f-babc-439f-8594-571ecfcbe57a"
+readonly PVS_CRN="crn:v1:bluemix:public:power-iaas:dal10:a/db1a8b544a184fd7ac339c243684a9b7:973f4d55-9056-4848-8ed0-4592093161d2::" #workspace crn
+readonly CLOUD_INSTANCE_ID="973f4d55-9056-4848-8ed0-4592093161d2" #workspace ID
 
 # LPAR Configuration
-readonly SECONDARY_LPAR="empty-ibmi-lpar"         # Target LPAR for cleanup
+readonly SECONDARY_LPAR="murphy-prod-clone"         # Target LPAR for cleanup
 
 # Polling Configuration
 readonly POLL_INTERVAL=30
