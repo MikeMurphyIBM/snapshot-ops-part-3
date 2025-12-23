@@ -247,7 +247,8 @@ echo ""
 # Logic:
 #   1. Attempt bulk detach of all volumes
 #   2. Wait for backend to process detachment
-#   3. Poll until no volumes remain attached
+#   3. If bulk detach fails and volumes still attached, retry individually
+#   4. Poll until no volumes remain attached
 ################################################################################
 echo "========================================================================"
 echo " STAGE 4/6: DETACH VOLUMES"
@@ -259,18 +260,28 @@ if [[ -z "$BOOT_VOLUME_ID" ]]; then
 else
     echo "→ Requesting bulk detach of all volumes..."
     
-    ibmcloud pi ins vol bulk-detach "$SECONDARY_INSTANCE_ID" \
+    # Attempt bulk detach
+    set +e
+    DETACH_OUTPUT=$(ibmcloud pi ins vol bulk-detach "$SECONDARY_INSTANCE_ID" \
         --detach-all \
-        --detach-primary > /dev/null 2>&1 || {
-        echo "⚠ WARNING: Bulk detach command failed - volumes may already be detached"
-    }
+        --detach-primary 2>&1)
+    DETACH_RC=$?
+    set -e
     
-    echo "✓ Detach request submitted"
+    if [[ $DETACH_RC -eq 0 ]]; then
+        echo "✓ Detach request submitted"
+    else
+        echo "⚠ WARNING: Bulk detach command failed"
+        echo "  Error: ${DETACH_OUTPUT}"
+        echo "  Will retry individual volume detachment if needed"
+    fi
+    
     echo ""
     
     echo "→ Waiting for volumes to detach (max: $(($MAX_DETACH_WAIT/60)) minutes)..."
     
     DETACH_ELAPSED=0
+    RETRY_ATTEMPTED=false
     
     # Initial wait for backend processing
     sleep 30
@@ -282,6 +293,34 @@ else
         if [[ -z "$ATTACHED" ]]; then
             echo "✓ All volumes detached successfully"
             break
+        fi
+        
+        # If initial detach failed and we haven't retried yet, try individual detach
+        if [[ $DETACH_RC -ne 0 && "$RETRY_ATTEMPTED" == "false" && $DETACH_ELAPSED -ge 60 ]]; then
+            echo ""
+            echo "→ Initial bulk detach failed - attempting individual volume detachment..."
+            RETRY_ATTEMPTED=true
+            
+            # Detach boot volume
+            if [[ -n "$BOOT_VOLUME_ID" ]]; then
+                echo "  Detaching boot volume: ${BOOT_VOLUME_ID}..."
+                ibmcloud pi ins vol detach "$SECONDARY_INSTANCE_ID" "$BOOT_VOLUME_ID" > /dev/null 2>&1 || {
+                    echo "  ⚠ Boot volume detach failed"
+                }
+            fi
+            
+            # Detach data volumes
+            if [[ -n "$DATA_VOLUME_IDS" ]]; then
+                for VOL_ID in ${DATA_VOLUME_IDS//,/ }; do
+                    echo "  Detaching data volume: ${VOL_ID}..."
+                    ibmcloud pi ins vol detach "$SECONDARY_INSTANCE_ID" "$VOL_ID" > /dev/null 2>&1 || {
+                        echo "  ⚠ Data volume detach failed"
+                    }
+                done
+            fi
+            
+            echo "  Retry detach commands issued - continuing wait..."
+            echo ""
         fi
         
         if [[ $DETACH_ELAPSED -ge $MAX_DETACH_WAIT ]]; then
@@ -487,3 +526,4 @@ JOB_SUCCESS=1
 
 sleep 2
 exit 0
+
